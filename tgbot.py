@@ -5,7 +5,6 @@ import textwrap
 
 import requests
 import telegram
-from dotenv import load_dotenv
 from PIL import Image
 from telegram import (BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
                       Update)

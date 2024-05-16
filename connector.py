@@ -4,7 +4,6 @@ import os
 import sys
 from pprint import pformat
 
-from dotenv import load_dotenv
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import NameResolutionError
 
