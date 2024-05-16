@@ -1,0 +1,5 @@
+venv/
+infra/
+.git/
+.idea/
+.env

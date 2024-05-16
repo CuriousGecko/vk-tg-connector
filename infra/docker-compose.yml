@@ -1,0 +1,19 @@
+services:
+  db_postgres:
+    image: postgres:latest
+    container_name: postgres
+    env_file: env.docker
+    ports:
+      - "5432:5432"
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  connector:
+    container_name: vk-tg_connector
+    build: ../
+    env_file: env.docker
+    depends_on:
+      - db_postgres
+
+volumes:
+  db:
