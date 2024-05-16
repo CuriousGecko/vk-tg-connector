@@ -17,8 +17,6 @@ from exceptions import (LongPollConnectionError, LongPollResponseError,
                         VkApiConnectionError, VkApiError)
 from logger import run_logger
 
-load_dotenv()
-
 logger = run_logger(os.path.basename(sys.argv[0]))
 
 

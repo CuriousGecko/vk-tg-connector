@@ -20,8 +20,6 @@ from exceptions import (MissingMessageIdError, MissingUserVkIdIdError,
                         NoDataInResponseError)
 from logger import run_logger
 
-load_dotenv()
-
 logger = run_logger('tgbot')
 
 
