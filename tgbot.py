@@ -103,9 +103,15 @@ class TgBot(vkapi.VkApi):
                         text=str(error),
                     )
                 elif method == 'send_msg_tg_vk':
-                    logger.error(
+                    text_error = (
                         'Во время отправки сообщения в Vk произошла ошибка: '
                         f'{error}'
+                    )
+                    logger.exception(text_error)
+
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=text_error,
                     )
                 elif method == 'send_msg_vk_tg':
                     logger.error(
@@ -681,6 +687,7 @@ class TgBot(vkapi.VkApi):
 
         return id_in_url
 
+    @log_method
     async def get_photo(self, photo_data):
         largest_photo = photo_data[-1]
         photo_file_info = await largest_photo.get_file()
@@ -698,7 +705,6 @@ class TgBot(vkapi.VkApi):
 
         return photo
 
-    @log_method
     def save_photo_in_vk(self, photo):
         vk_upload_url = self.get_photo_upload_server()
         uploaded_photo = self.upload_photo(
@@ -777,6 +783,7 @@ class TgBot(vkapi.VkApi):
             return
         elif update.effective_message.reply_to_message and chat_in_table:
             logger.info('Получаем vk id сообщения для создания ответа.')
+
             vk_user_id = chat_in_table.vk_user_id
             vk_msg_id_for_reply = self.get_vk_msg_id_for_reply(
                 update=update,
