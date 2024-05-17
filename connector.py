@@ -1,6 +1,7 @@
 import asyncio
 import multiprocessing
 import os
+import signal
 import sys
 from pprint import pformat
 
@@ -290,7 +291,14 @@ class VkTgConnector(vkapi.VkApi):
         return signature
 
 
+def signal_handler(sig, frame):
+    logger.info('\nExiting...')
+    sys.exit(0)
+
+
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal_handler)
+
     table_chat = db.Database()
     bot = tgbot.TgBot(db_table=table_chat)
     shared_unread_messages = multiprocessing.Manager().dict()
@@ -305,8 +313,3 @@ if __name__ == '__main__':
 
     connector = VkTgConnector()
     asyncio.run(connector.manager())
-
-    try:
-        bot_process.join()
-    finally:
-        bot_process.terminate()

@@ -717,6 +717,8 @@ class TgBot(vkapi.VkApi):
             resp_hash=uploaded_photo['hash'],
         )
 
+        logger.debug('Фото успешно загружено на сервер Vk.')
+
         return saved_photo
 
     def get_vk_msg_id_for_reply(
