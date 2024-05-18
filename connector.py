@@ -89,12 +89,13 @@ class VkTgConnector(vkapi.VkApi):
         logger.debug(pformat(f'Update: {updates}'))
 
         for element in updates:
-            if element[0] == 7:
+            event_code = element[0]
+            if event_code == 7:
                 vk_user_id = element[1]
 
                 await bot.send_read_notification(vk_user_id=vk_user_id)
             elif (
-                element[0] == ConnConst.NEW_MSG_CODE.value
+                event_code == ConnConst.NEW_MSG_CODE.value
                 and element[2] not in ConnConst.OUTGOING_MSG_CODE.value
             ):
                 logger.info(
