@@ -70,6 +70,7 @@ class VkTgConnector(vkapi.VkApi):
 
             except VkApiError as error:
                 error = str(error)
+
                 logger.error(msg=error)
 
                 await bot.app.bot.send_message(
@@ -292,7 +293,7 @@ class VkTgConnector(vkapi.VkApi):
 
 
 def signal_handler(sig, frame):
-    logger.info('\nExiting...')
+    logger.info('Exiting...')
     sys.exit(0)
 
 
