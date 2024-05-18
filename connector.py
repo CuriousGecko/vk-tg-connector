@@ -28,7 +28,7 @@ class VkTgConnector(vkapi.VkApi):
 
     async def manager(self):
         logger.info(
-            '\nЗапуск vk-tg connector v0.1.6a.'
+            '\nЗапуск vk-tg connector v0.1.7a.'
             f'\nБаза данных подключена ({DbConstant.DB_ENGINE.value}).'
         )
 
