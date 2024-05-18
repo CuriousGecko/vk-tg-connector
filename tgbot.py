@@ -823,14 +823,14 @@ class TgBot(vkapi.VkApi):
             photo = await self.get_photo(photo_data=photo_data)
             saved_photo = self.save_photo_in_vk(photo=photo)
 
-            vk_message_id = self.send_message_to_vk(
+            response = self.send_message_to_vk(
                 user_id=vk_user_id,
                 message=update.effective_message.caption,
                 uploaded_photo=saved_photo,
                 reply_to=vk_msg_id_for_reply,
             )
         else:
-            vk_message_id = self.send_message_to_vk(
+            response = self.send_message_to_vk(
                 user_id=vk_user_id,
                 message=update.effective_message.text,
                 reply_to=vk_msg_id_for_reply,
@@ -839,14 +839,34 @@ class TgBot(vkapi.VkApi):
         logger.info('Сообщение успешно отправлено в Vk.')
 
         self.unread_out_messages[tg_chat_id] = update.effective_message.id
+        vk_message_id = response.get('response')
+        tg_message_id = update.effective_message.id
+        chat_id = update.effective_chat.id
 
         self.table_chat.add_message(
             vk_user_id=vk_user_id,
-            vk_message_id=vk_message_id.get('response'),
-            tg_message_id=update.effective_message.id,
+            vk_message_id=vk_message_id,
+            tg_message_id=tg_message_id,
         )
 
-        await asyncio.sleep(TgConstants.SEND_MSG_TG_VK_INTERVAL.value)
+        logger.debug(
+            'Исходящее сообщение добавлено в БД.\n'
+            f'user: {vk_user_id}, '
+            f'vk_message_id: {vk_message_id}, '
+            f'tg_message_id: {tg_message_id}.'
+        )
+
+        notification = await context.bot.send_message(
+            chat_id=chat_id,
+            text='Сообщение отправлено.',
+        )
+
+        await asyncio.sleep(TgConstants.DEL_NOTIFICATION_OF_SEND.value)
+
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=notification.message_id,
+        )
 
     @log_method
     async def send_msg_vk_tg(
