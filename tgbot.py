@@ -201,7 +201,8 @@ class TgBot(vkapi.VkApi):
                                'собеседника.',
         }
         tg_chat_id = update.effective_chat.id
-        access = self.check_permission(update=update)
+        user_id = update.effective_user.id
+        access = self.check_permission(user_id=user_id)
 
         if not access:
             await context.bot.send_message(
@@ -227,10 +228,8 @@ class TgBot(vkapi.VkApi):
             text=text['success'],
         )
 
-    def check_permission(self, update: Update,):
-        access = update.effective_user.id == TgConstants.TELEGRAM_CHAT_ID.value
-
-        return access
+    def check_permission(self, user_id):
+        return user_id == TgConstants.TELEGRAM_CHAT_ID.value
 
     def create_keyboard(self, buttons):
         keyboard = []
@@ -260,7 +259,8 @@ class TgBot(vkapi.VkApi):
 
     @log_method
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        access = self.check_permission(update=update)
+        user_id = update.effective_user.id
+        access = self.check_permission(user_id=user_id)
 
         if access:
             await self.set_commands()
@@ -324,6 +324,12 @@ class TgBot(vkapi.VkApi):
                 'продолжить текущий диалог, но вы можете создать '
                 'собственного бота, следуя инструкции: '
                 'https://github.com/CuriousGecko/vk-tg-connector'
+            )
+            username = update.effective_user.username
+
+            logger.debug(
+                f'\n\nПользователю https://t.me/{username} (id={user_id}) '
+                f'доступ к функциям бота запрещен.\n\n'
             )
 
             await context.bot.send_message(
