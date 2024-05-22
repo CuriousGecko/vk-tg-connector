@@ -8,15 +8,16 @@ import telegram
 from PIL import Image
 from telegram import (BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
                       Update)
+from telegram.error import TelegramError
 from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
                           CommandHandler, ContextTypes, MessageHandler,
                           filters)
 
 import db
 import vkapi
-from constants import TgConstants
+from constants import TgConstant
 from exceptions import (MissingMessageIdError, MissingUserVkIdIdError,
-                        NoDataInResponseError)
+                        NoDataInResponseError,)
 from logger import run_logger
 
 logger = run_logger('tgbot')
@@ -30,9 +31,11 @@ class TgBot(vkapi.VkApi):
         self.last_update_id = None
         self.unread_out_messages = dict()
         self.read_notifications = dict()
+        self.chats_wait_id = set()
+        self.interfaces = dict()
         self.table_chat = db_table
         self.app = ApplicationBuilder().token(
-            TgConstants.TELEGRAM_BOT_TOKEN.value
+            TgConstant.TELEGRAM_BOT_TOKEN.value
         ).build()
 
         self.buttons = {
@@ -87,7 +90,7 @@ class TgBot(vkapi.VkApi):
                     text='Пользователь с таким vk_id не найден.',
                 )
 
-            except Exception as error:
+            except (TelegramError, Exception) as error:
                 if method == 'start':
                     logger.error(
                         f'Во время вызова бота произошла ошибка: {error}'
@@ -107,7 +110,7 @@ class TgBot(vkapi.VkApi):
                         'Во время отправки сообщения в Vk произошла ошибка: '
                         f'{error}'
                     )
-                    logger.exception(text_error)
+                    logger.error(text_error)
 
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
@@ -159,7 +162,7 @@ class TgBot(vkapi.VkApi):
             logger.info('Запуск Telegram Polling.')
             self.app.run_polling()
 
-        except Exception as error:
+        except (TelegramError, Exception) as error:
             logger.error(f'Ошибка при запросе обновлений: {error}')
 
     @log_method
@@ -229,10 +232,10 @@ class TgBot(vkapi.VkApi):
         )
 
     def check_permission(self, user_id):
-        return user_id == TgConstants.TELEGRAM_CHAT_ID.value
+        return user_id == TgConstant.TELEGRAM_CHAT_ID.value
 
     def create_keyboard(self, buttons):
-        keyboard = []
+        keyboard = list()
 
         for values in buttons:
             button_row = [
@@ -247,8 +250,8 @@ class TgBot(vkapi.VkApi):
 
     async def is_bot_admin(
             self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
         bot_info = await context.bot.get_chat_member(
             chat_id=update.effective_chat.id,
@@ -258,14 +261,19 @@ class TgBot(vkapi.VkApi):
         return bot_info.status == 'administrator'
 
     @log_method
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start(
+            self,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
+    ):
         user_id = update.effective_user.id
         access = self.check_permission(user_id=user_id)
+        chat_id = update.effective_chat.id
 
         if access:
             await self.set_commands()
 
-            if update.effective_chat.id == TgConstants.TELEGRAM_CHAT_ID.value:
+            if update.effective_chat.id == TgConstant.TELEGRAM_CHAT_ID.value:
                 bot_info = await context.bot.get_me()
                 bot_link = f'@{bot_info.username}'
                 text = (
@@ -283,7 +291,7 @@ class TgBot(vkapi.VkApi):
                 )
 
                 return await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
+                    chat_id=chat_id,
                     text=text,
                     parse_mode='HTML',
                 )
@@ -299,22 +307,23 @@ class TgBot(vkapi.VkApi):
                 )
 
                 await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
+                    chat_id=chat_id,
                     text=text,
                 )
             else:
+                await self.destroy_prev_interface(chat_id=chat_id)
+
                 reply_markup = self.create_keyboard(
                     buttons=self.buttons['start'],
                 )
-
-                if 'waiting_for_id' in context.user_data:
-                    del context.user_data['waiting_for_id']
-
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
+                interface = await context.bot.send_message(
+                    chat_id=chat_id,
                     text='Я бот, приветствую вас! Чем могу помочь?',
                     reply_markup=reply_markup,
                 )
+                interface_id = interface.message_id
+                self.interfaces[chat_id] = interface_id
+
         else:
             text = (
                 'Приветствую! Я бот, с помощью которого вы можете '
@@ -333,21 +342,60 @@ class TgBot(vkapi.VkApi):
             )
 
             await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+                chat_id=chat_id,
                 text=text,
             )
 
     @log_method
+    async def destroy_prev_interface(self, chat_id,):
+        self.chats_wait_id.discard(chat_id)
+
+        if chat_id in self.interfaces:
+            interface_id = self.interfaces.get(chat_id)
+
+            await self.app.bot.delete_message(
+                chat_id=chat_id,
+                message_id=interface_id,
+            )
+            return
+
+    @staticmethod
+    def check_interface_freshness(func):
+        async def wrapper(
+                self,
+                update: Update,
+                context: ContextTypes.DEFAULT_TYPE
+        ):
+            chat_id = update.effective_chat.id
+            msg_id = update.effective_message.id
+            freshness = msg_id in self.interfaces.values()
+            error_text = 'Интерфейс устарел. Необходимо вызвать бота снова.'
+
+            if not freshness:
+                logger.debug(error_text)
+
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=error_text,
+                )
+            else:
+                await func(self, update, context)
+
+        return wrapper
+
+    @log_method
+    @check_interface_freshness
     async def cancel(
             self,
             update: Update,
             context: ContextTypes.DEFAULT_TYPE,
     ):
-        if 'waiting_for_id' in context.user_data:
-            del context.user_data['waiting_for_id']
+        chat_id = update.effective_message.chat_id
 
-        await context.bot.editMessageText(
-            chat_id=update.effective_chat.id,
+        self.chats_wait_id.discard(chat_id)
+
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
             message_id=update.effective_message.id,
             text='Операция отменена.\n\nМогу ли я помочь вам чем-нибудь еще?',
             reply_markup=self.create_keyboard(
@@ -371,11 +419,13 @@ class TgBot(vkapi.VkApi):
         return message_parts
 
     @log_method
+    @check_interface_freshness
     async def friends(
             self,
             update: Update = Update,
             context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
+        chat_id = update.effective_chat.id
         response = self.get_friends()
         friends = response.get('response').get('items')
 
@@ -402,7 +452,7 @@ class TgBot(vkapi.VkApi):
 
         for part in text_parts:
             await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+                chat_id=chat_id,
                 text=part,
                 parse_mode='HTML',
                 disable_web_page_preview=True,
@@ -416,8 +466,8 @@ class TgBot(vkapi.VkApi):
         )
 
         if update.effective_message.text != text:
-            await context.bot.editMessageText(
-                chat_id=update.effective_chat.id,
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
                 message_id=update.effective_message.id,
                 text=text,
                 reply_markup=self.create_keyboard(
@@ -426,35 +476,39 @@ class TgBot(vkapi.VkApi):
             )
 
     @log_method
+    @check_interface_freshness
     async def add_chat(
             self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
-        context.user_data['waiting_for_id'] = True
-        context.user_data['effective_msg_id'] = update.effective_message.id
+        chat_id = update.effective_message.chat_id
+
+        self.chats_wait_id.add(chat_id)
+
         reply_markup = self.create_keyboard(buttons=self.buttons['cancel'])
         text = (
-            'Хорошо. Отправьте Vk id пользователя, '
+            'Хорошо. Отправьте vk_id пользователя, '
             'которого нужно связать с этим чатом. '
-            'Сюда будут перенаправляться все его сообщения, '
-            'а у вас появится возможность отвечать ему.'
+            'Сюда будут перенаправляться все его сообщения.'
         )
 
-        await context.bot.editMessageText(
-            chat_id=update.effective_chat.id,
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
             message_id=update.effective_message.id,
             text=text,
             reply_markup=reply_markup,
         )
 
     @log_method
+    @check_interface_freshness
     async def delete_chat(
             self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
-        chat = self.table_chat.get_chat(tg_chat_id=update.effective_chat.id)
+        chat_id = update.effective_chat.id
+        chat = self.table_chat.get_chat(tg_chat_id=chat_id)
 
         if chat:
             text = f'Удалить связь данного чата с {chat.vk_user}?'
@@ -474,28 +528,32 @@ class TgBot(vkapi.VkApi):
                 buttons=self.buttons['start'],
             )
 
-        await context.bot.editMessageText(
-            chat_id=update.effective_chat.id,
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
             message_id=update.effective_message.id,
             text=text,
             reply_markup=reply_markup,
         )
 
     @log_method
+    @check_interface_freshness
     async def chat_deletion_is_confirmed(
             self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
-        self.table_chat.delete_chat(tg_chat_id=update.effective_chat.id)
+        chat_id = update.effective_chat.id
+
+        self.table_chat.delete_chat(tg_chat_id=chat_id)
+        self.unread_out_messages.pop(chat_id, None)
 
         text = (
             'Связь успешно удалена.\n\n'
             'Могу ли я помочь вам чем-нибудь еще?'
         )
 
-        await context.bot.editMessageText(
-            chat_id=update.effective_chat.id,
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
             message_id=update.effective_message.id,
             text=text,
             reply_markup=self.create_keyboard(
@@ -506,13 +564,19 @@ class TgBot(vkapi.VkApi):
     @log_method
     async def message_from_user(
             self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
-        if context.user_data.get('waiting_for_id'):
-            await self.link_user_to_chat(update=update, context=context)
-        else:
+        chat_id = update.effective_message.chat_id
+
+        if chat_id not in self.chats_wait_id:
             await self.send_msg_tg_vk(update=update, context=context)
+        else:
+            await self.link_user_to_chat(
+                chat_id=chat_id,
+                update=update,
+                context=context,
+            )
 
     @staticmethod
     def check_vk_id(message):
@@ -535,15 +599,16 @@ class TgBot(vkapi.VkApi):
     @log_method
     async def link_user_to_chat(
             self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
+            chat_id,
+            update: Update = Update,
+            context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
         message = update.message.text
-
         text = self.check_vk_id(message)
+
         if text:
             await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+                chat_id=chat_id,
                 text=text,
             )
             return
@@ -562,20 +627,15 @@ class TgBot(vkapi.VkApi):
         else:
             vk_user = vk_user_info.get('group_name')
 
-        chat = self.table_chat.get_chat(vk_user_id=vk_user_id)
+        self.table_chat.add_or_update_chat(
+            vk_user_id=vk_user_id,
+            vk_user=vk_user,
+            tg_chat_id=chat_id,
+        )
+        self.table_chat.delete_messages(vk_user_id=vk_user_id)
 
-        if chat:
-            self.table_chat.update_chat(
-                vk_user_id=vk_user_id,
-                new_vk_user=vk_user,
-                tg_chat_id=update.effective_chat.id,
-            )
-        else:
-            self.table_chat.add_chat(
-                vk_user_id=vk_user_id,
-                vk_user=vk_user,
-                tg_chat_id=update.effective_chat.id,
-            )
+        self.chats_wait_id.discard(chat_id)
+        self.unread_out_messages.pop(chat_id, None)
 
         if vk_user_info.get('type') == 'user':
             text = (
@@ -590,8 +650,6 @@ class TgBot(vkapi.VkApi):
                 f'{vk_user}</a> в этом чате.'
             )
 
-        del context.user_data['waiting_for_id']
-
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=text,
@@ -599,13 +657,14 @@ class TgBot(vkapi.VkApi):
             disable_web_page_preview=True,
         )
 
+        interface_id = self.interfaces.get(chat_id)
         text = (
             'Аккаунт собеседника успешно связан с данным чатом.\n\n'
             'Могу ли я помочь вам чем-нибудь еще?'
         )
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
-            message_id=context.user_data['effective_msg_id'],
+            message_id=interface_id,
             text=text,
             reply_markup=self.create_keyboard(
                 buttons=self.buttons['start'],
@@ -641,13 +700,15 @@ class TgBot(vkapi.VkApi):
         )
 
     @log_method
-    async def send_read_notification(self, vk_user_id, ):
+    async def send_read_notification(self, vk_user_id):
         chat_in_table = self.table_chat.get_chat(vk_user_id=vk_user_id)
+        response = self.get_user(vk_user_id, name_case='nom').get(
+            'response')[0]
+        username = f"{response.get('first_name')} {response.get('last_name')}"
         notification_text = {
-            'text': 'Ваши сообщения прочитаны.',
-            'ext_text': 'Ваши сообщения были прочитаны пользователем '
-                        f'vk_id({vk_user_id}).',
-        }
+                'text': 'Ваши сообщения были прочитаны.',
+                'ext_text': f'{username} прочитал ваши сообщения.',
+            }
 
         logger.info(notification_text['ext_text'])
 
@@ -656,7 +717,7 @@ class TgBot(vkapi.VkApi):
             unread_out_message = self.unread_out_messages.get(chat_id)
 
             if (
-                TgConstants.READ_NOTIFICATION_MODE.value == 1
+                TgConstant.READ_NOTIFICATION_MODE.value == 1
                 and unread_out_message
             ):
                 await self.app.bot.set_message_reaction(
@@ -664,7 +725,7 @@ class TgBot(vkapi.VkApi):
                     message_id=unread_out_message,
                     reaction='👀',
                 )
-            elif TgConstants.READ_NOTIFICATION_MODE.value == 2:
+            elif TgConstant.READ_NOTIFICATION_MODE.value == 2:
                 read_notification = await self.app.bot.send_message(
                     chat_id=chat_id,
                     text=notification_text['text'],
@@ -683,7 +744,7 @@ class TgBot(vkapi.VkApi):
                 self.read_notifications[vk_user_id] = new_notification_msg_id
         else:
             await self.app.bot.send_message(
-                chat_id=TgConstants.TELEGRAM_CHAT_ID.value,
+                chat_id=TgConstant.TELEGRAM_CHAT_ID.value,
                 text=notification_text['ext_text'],
             )
 
@@ -790,7 +851,7 @@ class TgBot(vkapi.VkApi):
             logger.warning('Данное сообщение уже было отправлено ранее.')
             return
         elif update.effective_message.reply_to_message and chat_in_table:
-            logger.info('Получаем vk id сообщения для создания ответа.')
+            logger.info('Получаем из БД vk id сообщения для создания ответа.')
 
             vk_user_id = chat_in_table.vk_user_id
             vk_msg_id_for_reply = self.get_vk_msg_id_for_reply(
@@ -803,9 +864,31 @@ class TgBot(vkapi.VkApi):
             vk_user_id = self.get_vk_user_id_from_msg(
                 update=update,
             )
+
+            if tg_chat_id == TgConstant.TELEGRAM_CHAT_ID.value:
+                additional_chat = self.table_chat.get_chat(
+                    vk_user_id=vk_user_id,
+                )
+
+                if additional_chat:
+                    chat_link = (
+                        await context.bot.get_chat(
+                            chat_id=additional_chat.tg_chat_id,
+                            )
+                    ).invite_link
+                    text = (
+                        f'Сообщение не было отправлено. Для общения с данным '
+                        f'пользователем используйте чат {chat_link}'
+                    )
+
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=text,
+                    )
+                    return
         elif (
                 update.effective_message.chat_id
-                == TgConstants.TELEGRAM_CHAT_ID.value
+                == TgConstant.TELEGRAM_CHAT_ID.value
                 or not chat_in_table
         ):
             await context.bot.send_message(
@@ -843,6 +926,18 @@ class TgBot(vkapi.VkApi):
         tg_message_id = update.effective_message.id
         chat_id = update.effective_chat.id
 
+        notification = await context.bot.send_message(
+            chat_id=chat_id,
+            text='Сообщение отправлено.',
+        )
+
+        await asyncio.sleep(TgConstant.DEL_NOTIFICATION_OF_SEND.value)
+
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=notification.message_id,
+        )
+
         self.table_chat.add_message(
             vk_user_id=vk_user_id,
             vk_message_id=vk_message_id,
@@ -856,18 +951,6 @@ class TgBot(vkapi.VkApi):
             f'tg_message_id: {tg_message_id}.'
         )
 
-        notification = await context.bot.send_message(
-            chat_id=chat_id,
-            text='Сообщение отправлено.',
-        )
-
-        await asyncio.sleep(TgConstants.DEL_NOTIFICATION_OF_SEND.value)
-
-        await context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=notification.message_id,
-        )
-
     @log_method
     async def send_msg_vk_tg(
             self,
@@ -879,8 +962,8 @@ class TgBot(vkapi.VkApi):
 
         chat = self.table_chat.get_chat(vk_user_id=vk_sender_id)
         chat_id = (
-            chat.tg_chat_id if chat is not None
-            else TgConstants.TELEGRAM_CHAT_ID.value
+            chat.tg_chat_id if chat
+            else TgConstant.TELEGRAM_CHAT_ID.value
         )
 
         if 'sticker_url' in message:
@@ -894,7 +977,7 @@ class TgBot(vkapi.VkApi):
                 text=message.get('text'),
                 parse_mode='HTML',
                 reply_to_message_id=reply_to_message_id,
-                connect_timeout=TgConstants.SEND_MSG_CONN_TIMEOUT.value,
+                connect_timeout=TgConstant.SEND_MSG_CONN_TIMEOUT.value,
             )
             return
 
@@ -915,7 +998,7 @@ class TgBot(vkapi.VkApi):
                 parse_mode='HTML',
                 media=media_group,
                 reply_to_message_id=reply_to_message_id,
-                connect_timeout=TgConstants.SEND_MSG_CONN_TIMEOUT.value,
+                connect_timeout=TgConstant.SEND_MSG_CONN_TIMEOUT.value,
             )
             orig_message_id = orig_message[0].message_id
         else:
@@ -924,27 +1007,26 @@ class TgBot(vkapi.VkApi):
                 text=message.get('text'),
                 parse_mode='HTML',
                 reply_to_message_id=reply_to_message_id,
-                connect_timeout=TgConstants.SEND_MSG_CONN_TIMEOUT.value,
+                connect_timeout=TgConstant.SEND_MSG_CONN_TIMEOUT.value,
             )
             orig_message_id = orig_message.message_id
 
         logger.info('Сообщение успешно отправлено в Telegram.')
 
-        if chat:
-            message_id = message['message_id']
+        message_id = message['message_id']
 
-            self.table_chat.add_message(
-                vk_user_id=vk_sender_id,
-                vk_message_id=message_id,
-                tg_message_id=orig_message_id,
-            )
+        self.table_chat.add_message(
+            vk_user_id=vk_sender_id,
+            vk_message_id=message_id,
+            tg_message_id=orig_message_id,
+        )
 
-            logger.debug(
-                f'Входящее сообщение добавлено в БД.\n'
-                f'user: {vk_sender_id}, '
-                f'vk_message_id: {message_id}, '
-                f'tg_message_id: {orig_message_id}.'
-            )
+        logger.debug(
+            f'Входящее сообщение добавлено в БД.\n'
+            f'user: {vk_sender_id}, '
+            f'vk_message_id: {message_id}, '
+            f'tg_message_id: {orig_message_id}.'
+        )
 
         return orig_message_id
 

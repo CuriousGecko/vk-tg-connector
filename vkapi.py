@@ -3,7 +3,7 @@ from typing import Any, Union
 
 import requests
 
-from constants import VkConstants
+from constants import VkConstant
 from exceptions import (LongPollConnectionError, LongPollResponseError,
                         NoDataInResponseError, VkApiConnectionError,
                         VkApiError)
@@ -66,12 +66,12 @@ class VkApiBase:
 
     def get_vk_long_pol_server(self):
         """Запросит URL LongPoll сервера."""
-        endpoint = VkConstants.ENDPOINTS.value['get_lp_server']
+        endpoint = VkConstant.ENDPOINTS.value['get_lp_server']
         data = {
-            'need_pts': VkConstants.NEED_PTS.value,
-            'lp_version': VkConstants.LP_VERSION.value,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'need_pts': VkConstant.NEED_PTS.value,
+            'lp_version': VkConstant.LP_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -85,8 +85,8 @@ class VkApiBase:
             'wait': wait,
             'key': self.poll_server_key,
             'ts': self.timestamp,
-            'mode': VkConstants.LONG_POLL_MODE.value,
-            'version': VkConstants.LONG_POLL_VERSION.value,
+            'mode': VkConstant.LONG_POLL_MODE.value,
+            'version': VkConstant.LONG_POLL_VERSION.value,
             }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -94,10 +94,10 @@ class VkApiBase:
 
     def get_photo_upload_server(self):
         """Вернет URL сервера для загрузки изображения."""
-        endpoint = VkConstants.ENDPOINTS.value['get_photo_upload_server']
+        endpoint = VkConstant.ENDPOINTS.value['get_photo_upload_server']
         data = {
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
         upload_server_url = response['response']['upload_url']
@@ -113,13 +113,13 @@ class VkApiBase:
 
     def save_messages_photo(self, server_id, photo, resp_hash):
         """Сохранит изображение на сервере."""
-        endpoint = VkConstants.ENDPOINTS.value['save_messages_photo']
+        endpoint = VkConstant.ENDPOINTS.value['save_messages_photo']
         data = {
             'server': server_id,
             'photo': photo,
             'hash': resp_hash,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -133,7 +133,7 @@ class VkApiBase:
             uploaded_photo=None,
     ):
         """Отправит сообщение пользователю Vk."""
-        endpoint = VkConstants.ENDPOINTS.value['send_message']
+        endpoint = VkConstant.ENDPOINTS.value['send_message']
         attachment = None
 
         if uploaded_photo:
@@ -147,8 +147,8 @@ class VkApiBase:
             'attachment': attachment,
             'reply_to': reply_to,
             'random_id': 0,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -156,13 +156,13 @@ class VkApiBase:
 
     def get_user(self, user_id, name_case):
         """Вернет информацию о пользователе."""
-        endpoint = VkConstants.ENDPOINTS.value['get_users']
+        endpoint = VkConstant.ENDPOINTS.value['get_users']
         data = {
             'user_ids': user_id,
             'fields': 'photo_200',
             'name_case': name_case,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -170,11 +170,11 @@ class VkApiBase:
 
     def get_group(self, group_id):
         """Вернет информацию о группе."""
-        endpoint = VkConstants.ENDPOINTS.value['get_group']
+        endpoint = VkConstant.ENDPOINTS.value['get_group']
         data = {
             'group_id': group_id,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -182,13 +182,13 @@ class VkApiBase:
 
     def get_friends(self, order='hints', name_case='nom'):
         """Вернет список друзей пользователя."""
-        endpoint = VkConstants.ENDPOINTS.value['get_friends']
+        endpoint = VkConstant.ENDPOINTS.value['get_friends']
         data = {
             'fields': 'nickname',
             'order': order,
             'name_case': name_case,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -196,11 +196,11 @@ class VkApiBase:
 
     def get_message_by_id(self, message_id):
         """Вернет данные конкретного сообщения."""
-        endpoint = VkConstants.ENDPOINTS.value['get_message_by_id']
+        endpoint = VkConstant.ENDPOINTS.value['get_message_by_id']
         data = {
             'message_ids': message_id,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -208,12 +208,12 @@ class VkApiBase:
 
     def short_link(self, url, private=True):
         """Сократит ссылку."""
-        endpoint = VkConstants.ENDPOINTS.value['get_short_link']
+        endpoint = VkConstant.ENDPOINTS.value['get_short_link']
         data = {
             'url': url,
             'private': 1 if private else 0,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -221,11 +221,11 @@ class VkApiBase:
 
     def get_video(self, param_videos):
         """Вернет данные видео."""
-        endpoint = VkConstants.ENDPOINTS.value['get_video']
+        endpoint = VkConstant.ENDPOINTS.value['get_video']
         data = {
             'videos': ','.join(param_videos),
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 
@@ -233,11 +233,11 @@ class VkApiBase:
 
     def message_mark_as_read(self, peer_id):
         """Отметит сообщения как прочитанные."""
-        endpoint = VkConstants.ENDPOINTS.value['message_mark_as_read']
+        endpoint = VkConstant.ENDPOINTS.value['message_mark_as_read']
         data = {
             'peer_id': peer_id,
-            'access_token': VkConstants.ACCESS_TOKEN.value,
-            'v': VkConstants.API_VERSION.value,
+            'access_token': VkConstant.ACCESS_TOKEN.value,
+            'v': VkConstant.API_VERSION.value,
         }
         response = self.make_request_and_check(url=endpoint, data=data, )
 

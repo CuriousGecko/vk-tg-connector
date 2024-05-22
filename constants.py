@@ -1,5 +1,6 @@
 import os
 from enum import Enum
+from urllib.parse import urlparse, parse_qs
 
 from dotenv import load_dotenv
 
@@ -8,7 +9,29 @@ load_dotenv()
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
 
-class ConnectorConstants(Enum):
+class DbConstant(Enum):
+    USE_POSTGRES = os.getenv('USE_POSTGRES', 'True').lower() == 'true'
+
+    if USE_POSTGRES:
+        POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'db_postgres')
+        POSTGRES_PORT = os.getenv('POSTGRES_PORT', 5432)
+        POSTGRES_USER = os.getenv('POSTGRES_USER')
+        POSTGRES_PSW = os.getenv('POSTGRES_PASSWORD')
+        POSTGRES_DB = os.getenv('POSTGRES_DB', 'chats')
+        ECHO = os.getenv('ECHO', 'False').lower() == 'true'
+        DB_URL = (
+            f'postgresql://{POSTGRES_USER}:{POSTGRES_PSW}'
+            f'@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}'
+        )
+        DB_ENGINE = 'PostgreSQL'
+    else:
+        DB_URL = 'sqlite:///chats.sqlite3'
+        DB_ENGINE = 'SQLite'
+
+    MAX_MESSAGES_PER_USER = 200
+
+
+class ConnectorConstant(Enum):
     VK_ID = int(os.getenv('VK_ID'))
     LONG_POLL_INTERVAL = 25
     CONN_ER_INTERVAL = 30
@@ -18,7 +41,7 @@ class ConnectorConstants(Enum):
     NEW_MSG_CODE = 4
 
 
-class TgConstants(Enum):
+class TgConstant(Enum):
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_CHAT_ID = int(os.getenv('TELEGRAM_CHAT_ID'))
     READ_NOTIFICATION_MODE = int(os.getenv('READ_NOTIFICATION_MODE'))
@@ -26,8 +49,20 @@ class TgConstants(Enum):
     DEL_NOTIFICATION_OF_SEND = 2
 
 
-class VkConstants(Enum):
-    ACCESS_TOKEN = os.getenv('VK_ACCESS_TOKEN')
+def get_vk_token():
+    token = os.getenv('VK_ACCESS_TOKEN')
+
+    if 'https' in token:
+        parsed_url = urlparse(token)
+        fragment = parsed_url.fragment
+        token_params = parse_qs(fragment)
+        token = token_params.get('access_token')[0]
+
+    return token
+
+
+class VkConstant(Enum):
+    ACCESS_TOKEN = get_vk_token()
     NEED_PTS = 0
     LP_VERSION = 3
     API_VERSION = 5.199
@@ -55,23 +90,3 @@ class VkConstants(Enum):
             'https://api.vk.com/method/photos.saveMessagesPhoto'
         ),
     }
-
-
-class DbConstant(Enum):
-    USE_POSTGRES = os.getenv('USE_POSTGRES', 'True').lower() == 'true'
-
-    if USE_POSTGRES:
-        POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'db_postgres')
-        POSTGRES_PORT = os.getenv('POSTGRES_PORT', 5432)
-        POSTGRES_USER = os.getenv('POSTGRES_USER')
-        POSTGRES_PSW = os.getenv('POSTGRES_PASSWORD')
-        POSTGRES_DB = os.getenv('POSTGRES_DB', 'chats')
-        ECHO = os.getenv('ECHO', 'False').lower() == 'true'
-        DB_URL = (
-            f'postgresql://{POSTGRES_USER}:{POSTGRES_PSW}'
-            f'@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}'
-        )
-        DB_ENGINE = 'PostgreSQL'
-    else:
-        DB_URL = 'sqlite:///chats.sqlite3'
-        DB_ENGINE = 'SQLite'

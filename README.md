@@ -37,7 +37,7 @@
 
    **VK_ID** # ваш id в Vk.
 
-   **VK_ACCESS_TOKEN** # укажите токен приложения Vk, которому вы разрешили доступ к личным сообщениям, списку друзей и прочим данным. Можно воспользоваться [готовым приложением](https://oauth.vk.com/authorize?client_id=2685278&scope=1073737727&redirect_uri=https://api.vk.com/blank.html&display=page&response_type=token&revoke=1). Подтвердите предоставление доступа, в открывшейся вкладке скопируйте из адресной строки всё, начиная с vk1.
+   **VK_ACCESS_TOKEN** # укажите токен приложения Vk, которому вы разрешили доступ к личным сообщениям, списку друзей и прочим данным. Можно воспользоваться [готовым приложением](https://oauth.vk.com/authorize?client_id=2685278&scope=1073737727&redirect_uri=https://api.vk.com/blank.html&display=page&response_type=token&revoke=1). Подтвердите предоставление доступа, в открывшейся вкладке скопируйте из адресной строки ссылку целиком, либо значение параметра access_token.
    
    **TELEGRAM_CHAT_ID** # ваш id в Telegram. Можно узнать у @userinfobot.
 
@@ -59,7 +59,7 @@
 
    **POSTGRES_PASSWORD** # придумайте надежный пароль.
 
-   **POSTGRES_DB** # название БД
+   **POSTGRES_DB** # название БД.
 
    **POSTGRES_PORT** # измените порт, если потребуется. Также необходимо будет внести изменения в docker-compose.yml
 

@@ -11,8 +11,8 @@ from urllib3.exceptions import NameResolutionError
 import db
 import tgbot
 import vkapi
-from constants import ConnectorConstants as ConnConst
-from constants import DbConstant, TgConstants
+from constants import ConnectorConstant as ConnConst
+from constants import DbConstant, TgConstant
 from exceptions import (LongPollConnectionError, LongPollResponseError,
                         VkApiConnectionError, VkApiError)
 from logger import run_logger
@@ -28,7 +28,7 @@ class VkTgConnector(vkapi.VkApi):
 
     async def manager(self):
         logger.info(
-            '\nЗапуск vk-tg connector v0.1.7a.'
+            '\nЗапуск vk-tg connector v0.1.8a.'
             f'\nБаза данных подключена ({DbConstant.DB_ENGINE.value}).'
         )
 
@@ -74,7 +74,7 @@ class VkTgConnector(vkapi.VkApi):
                 logger.error(msg=error)
 
                 await bot.app.bot.send_message(
-                    chat_id=TgConstants.TELEGRAM_CHAT_ID.value,
+                    chat_id=TgConstant.TELEGRAM_CHAT_ID.value,
                     text=error,
                 )
 
@@ -90,6 +90,7 @@ class VkTgConnector(vkapi.VkApi):
 
         for element in updates:
             event_code = element[0]
+
             if event_code == 7:
                 vk_user_id = element[1]
 
