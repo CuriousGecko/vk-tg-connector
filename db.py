@@ -1,6 +1,6 @@
 import sqlalchemy as db
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.sql.operators import and_
 
 from constants import DbConstant

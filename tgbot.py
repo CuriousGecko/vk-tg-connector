@@ -17,7 +17,7 @@ import db
 import vkapi
 from constants import TgConstant
 from exceptions import (MissingMessageIdError, MissingUserVkIdIdError,
-                        NoDataInResponseError,)
+                        NoDataInResponseError)
 from logger import run_logger
 
 logger = run_logger('tgbot')
