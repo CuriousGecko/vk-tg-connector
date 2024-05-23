@@ -178,6 +178,8 @@ class TgBot(vkapi.VkApi):
 
         await self.app.bot.set_my_commands(commands)
 
+        logger.info('Команды для управления ботом установлены.')
+
     @log_method
     async def help(
             self,

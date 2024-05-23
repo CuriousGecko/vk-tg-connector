@@ -310,11 +310,11 @@ if __name__ == '__main__':
     bot.read_notifications = shared_notifications
 
     bot.add_handlers()
-
     bot_process = multiprocessing.Process(target=bot.polling)
     bot_process.start()
 
-    asyncio.run(bot.set_commands())
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(bot.set_commands())
 
     connector = VkTgConnector()
-    asyncio.run(connector.manager())
+    loop.run_until_complete(connector.manager())
