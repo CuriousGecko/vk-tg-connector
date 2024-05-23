@@ -314,5 +314,7 @@ if __name__ == '__main__':
     bot_process = multiprocessing.Process(target=bot.polling)
     bot_process.start()
 
+    asyncio.run(bot.set_commands())
+
     connector = VkTgConnector()
     asyncio.run(connector.manager())

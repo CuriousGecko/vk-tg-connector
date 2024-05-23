@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import io
 import re
 import textwrap
@@ -74,7 +75,6 @@ class TgBot(vkapi.VkApi):
                     chat_id=update.effective_message.chat_id,
                     text=error_text,
                 )
-                return
 
             except NoDataInResponseError as error:
                 vk_user_id = update.message.text
@@ -271,8 +271,6 @@ class TgBot(vkapi.VkApi):
         chat_id = update.effective_chat.id
 
         if access:
-            await self.set_commands()
-
             if update.effective_chat.id == TgConstant.TELEGRAM_CHAT_ID.value:
                 bot_info = await context.bot.get_me()
                 bot_link = f'@{bot_info.username}'
@@ -357,10 +355,10 @@ class TgBot(vkapi.VkApi):
                 chat_id=chat_id,
                 message_id=interface_id,
             )
-            return
 
     @staticmethod
     def check_interface_freshness(func):
+        @functools.wraps(func)
         async def wrapper(
                 self,
                 update: Update,
