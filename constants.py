@@ -33,6 +33,7 @@ class DbConstant(Enum):
 
 class ConnectorConstant(Enum):
     VK_ID = int(os.getenv('VK_ID'))
+    MANAGER_INTERVAL = 0.5
     LONG_POLL_INTERVAL = 25
     CONN_ER_INTERVAL = 30
     API_ER_TRY_INTERVAL = 30

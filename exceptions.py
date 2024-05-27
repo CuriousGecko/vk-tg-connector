@@ -22,5 +22,13 @@ class MissingMessageIdError(Exception):
     pass
 
 
-class MissingUserVkIdIdError(Exception):
+class MissingUserVkIdError(Exception):
+    pass
+
+
+class NoInterlocutorError(Exception):
+    pass
+
+
+class NoMessageForReply(Exception):
     pass

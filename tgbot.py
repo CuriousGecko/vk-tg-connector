@@ -1,7 +1,6 @@
 import asyncio
 import functools
 import io
-import re
 import textwrap
 
 import requests
@@ -17,8 +16,9 @@ from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
 import db
 import vkapi
 from constants import TgConstant
-from exceptions import (MissingMessageIdError, MissingUserVkIdIdError,
-                        NoDataInResponseError)
+from exceptions import (MissingMessageIdError, MissingUserVkIdError,
+                        NoDataInResponseError, NoInterlocutorError,
+                        NoMessageForReply)
 from logger import run_logger
 
 logger = run_logger('tgbot')
@@ -30,7 +30,6 @@ class TgBot(vkapi.VkApi):
     def __init__(self, db_table):
         super().__init__()
         self.last_update_id = None
-        self.unread_out_messages = dict()
         self.read_notifications = dict()
         self.chats_wait_id = set()
         self.interfaces = dict()
@@ -66,7 +65,11 @@ class TgBot(vkapi.VkApi):
                 logger.debug(f'Метод {method} вернул {result}')
                 return result
 
-            except (MissingMessageIdError, MissingUserVkIdIdError) as error:
+            except (
+                    MissingMessageIdError,
+                    MissingUserVkIdError,
+                    NoInterlocutorError,
+            ) as error:
                 error_text = f'Не удалось отправить сообщение: {error}'
 
                 logger.error(msg=error_text,)
@@ -110,14 +113,14 @@ class TgBot(vkapi.VkApi):
                         'Во время отправки сообщения в Vk произошла ошибка: '
                         f'{error}'
                     )
-                    logger.error(text_error)
+                    logger.exception(text_error)
 
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
                         text=text_error,
                     )
                 elif method == 'send_msg_vk_tg':
-                    logger.error(
+                    logger.exception(
                         'Во время отправки сообщения в Telegram произошла '
                         f'ошибка: {error}'
                     )
@@ -172,13 +175,13 @@ class TgBot(vkapi.VkApi):
                 command='read',
                 description='Пометить сообщения как прочитанные',
             ),
-            BotCommand(command='start', description='Запустить бота', ),
+            BotCommand(command='start', description='Вызвать бота', ),
             BotCommand(command='help', description='Помощь', )
         ]
 
-        await self.app.bot.set_my_commands(commands)
+        logger.info('Установка команд для управления ботом.')
 
-        logger.info('Команды для управления ботом установлены.')
+        await self.app.bot.set_my_commands(commands)
 
     @log_method
     async def help(
@@ -286,7 +289,7 @@ class TgBot(vkapi.VkApi):
                     '1. Создайте для собеседника группу.\n'
                     f'2. Добавьте в неё бота {bot_link}.\n'
                     '3. Назначьте бота администратором.\n'
-                    '4. Запустите бота.\n'
+                    '4. Вызовите бота.\n'
                     '5. Добавьте с его помощью собеседника.\n'
                 )
 
@@ -545,7 +548,6 @@ class TgBot(vkapi.VkApi):
         chat_id = update.effective_chat.id
 
         self.table_chat.delete_chat(tg_chat_id=chat_id)
-        self.unread_out_messages.pop(chat_id, None)
 
         text = (
             'Связь успешно удалена.\n\n'
@@ -593,7 +595,6 @@ class TgBot(vkapi.VkApi):
             )
 
             return text
-
         return None
 
     @log_method
@@ -635,7 +636,6 @@ class TgBot(vkapi.VkApi):
         self.table_chat.delete_messages(vk_user_id=vk_user_id)
 
         self.chats_wait_id.discard(chat_id)
-        self.unread_out_messages.pop(chat_id, None)
 
         if vk_user_info.get('type') == 'user':
             text = (
@@ -700,7 +700,7 @@ class TgBot(vkapi.VkApi):
         )
 
     @log_method
-    async def send_read_notification(self, vk_user_id):
+    async def send_read_notification(self, vk_user_id, vk_message_id):
         chat_in_table = self.table_chat.get_chat(vk_user_id=vk_user_id)
         response = self.get_user(vk_user_id, name_case='nom').get(
             'response')[0]
@@ -714,17 +714,20 @@ class TgBot(vkapi.VkApi):
 
         if chat_in_table:
             chat_id = chat_in_table.tg_chat_id
-            unread_out_message = self.unread_out_messages.get(chat_id)
 
-            if (
-                TgConstant.READ_NOTIFICATION_MODE.value == 1
-                and unread_out_message
-            ):
-                await self.app.bot.set_message_reaction(
-                    chat_id=chat_id,
-                    message_id=unread_out_message,
-                    reaction='👀',
+            if TgConstant.READ_NOTIFICATION_MODE.value == 1:
+                vk_message_in_db = self.table_chat.get_message(
+                    vk_message_id=vk_message_id,
                 )
+
+                if vk_message_in_db:
+                    tg_message_id = vk_message_in_db.tg_message_id
+
+                    await self.app.bot.set_message_reaction(
+                        chat_id=chat_id,
+                        message_id=tg_message_id,
+                        reaction='👀',
+                    )
             elif TgConstant.READ_NOTIFICATION_MODE.value == 2:
                 read_notification = await self.app.bot.send_message(
                     chat_id=chat_id,
@@ -747,12 +750,6 @@ class TgBot(vkapi.VkApi):
                 chat_id=TgConstant.TELEGRAM_CHAT_ID.value,
                 text=notification_text['ext_text'],
             )
-
-    def find_id_in_url(self, url):
-        pattern = r'\d+'
-        id_in_url = (re.search(pattern, url)).group()
-
-        return id_in_url
 
     @log_method
     async def get_photo(self, photo_data):
@@ -788,51 +785,41 @@ class TgBot(vkapi.VkApi):
 
         return saved_photo
 
-    def get_vk_msg_id_for_reply(
-            self,
-            update: Update,
-            vk_user_id,
-    ):
-        message = self.table_chat.get_message(
-            vk_user_id=vk_user_id,
-            tg_message_id=(
-                update.effective_message.reply_to_message.message_id
+    def get_vk_user_id_for_msg(self, tg_chat_id):
+        if tg_chat_id == TgConstant.TELEGRAM_CHAT_ID.value:
+            raise NoInterlocutorError(
+                'используйте кнопку "Ответить" на входящих сообщениях.'
             )
+
+        chat_in_table = self.table_chat.get_chat(tg_chat_id=tg_chat_id)
+
+        if chat_in_table:
+            return chat_in_table.vk_user_id
+
+        raise MissingUserVkIdError('для данного сообщения нет адресата.')
+
+    def get_data_for_reply(self, tg_chat_id, update):
+        tg_msg_id = update.effective_message.reply_to_message.message_id
+        message_in_db = self.table_chat.get_message(
+            tg_message_id=tg_msg_id,
+            tg_chat_id=tg_chat_id,
         )
 
-        if message:
-            return message.vk_message_id
+        if message_in_db:
+            vk_user_id = message_in_db.vk_user_id
+            vk_message_id = message_in_db.vk_message_id
+        elif tg_chat_id == TgConstant.TELEGRAM_CHAT_ID.value:
+            raise MissingUserVkIdError(
+                'не могу определить получателя. Возможно, для него '
+                'создан отдельный чат или сообщение слишком старое.'
+            )
         else:
-            raise MissingMessageIdError(
-                'в выбранном сообщении отсутствуют данные, необходимые для '
-                'определения отправителя, или оно слишком старое.'
+            raise NoMessageForReply(
+                'не удалось определить id сообщения в Vk, на которое '
+                'отправляется ответ.'
             )
 
-    def get_vk_user_id_from_msg(
-            self,
-            update: Update,
-    ):
-        vk_user_id = None
-        entities = (
-            update.message.reply_to_message.caption_entities
-            or update.message.reply_to_message.entities
-        )
-
-        if entities:
-            url_in_name = entities[0].url
-
-            if (
-                url_in_name
-                and 'https://vk.com/im?sel=' in url_in_name
-                and update.message.reply_to_message.from_user.is_bot
-            ):
-                vk_user_id = self.find_id_in_url(url=url_in_name)
-                return vk_user_id
-
-        if not vk_user_id:
-            raise MissingUserVkIdIdError(
-                'в выбранном сообщении не найден vk_id адресата.'
-            )
+        return vk_user_id, vk_message_id
 
     @log_method
     async def send_msg_tg_vk(
@@ -840,67 +827,26 @@ class TgBot(vkapi.VkApi):
             update: Update = Update,
             context: ContextTypes.DEFAULT_TYPE = ContextTypes.DEFAULT_TYPE
     ):
-        logger.info('Подготавливается отправка сообщения в Vk.')
-
-        tg_chat_id = update.effective_chat.id
-        chat_in_table = self.table_chat.get_chat(tg_chat_id=tg_chat_id)
-        vk_msg_id_for_reply = None
-        vk_user_id = None
-
         if update.effective_message.edit_date:
             logger.warning('Данное сообщение уже было отправлено ранее.')
             return
-        elif update.effective_message.reply_to_message and chat_in_table:
-            logger.info('Получаем из БД vk id сообщения для создания ответа.')
 
-            vk_user_id = chat_in_table.vk_user_id
-            vk_msg_id_for_reply = self.get_vk_msg_id_for_reply(
-                update=update,
-                vk_user_id=vk_user_id,
-            )
-        elif update.effective_message.reply_to_message:
-            logger.info('Получаем vk_id адресата из текста сообщения.')
+        logger.info('Подготавливается отправка сообщения в Vk.')
 
-            vk_user_id = self.get_vk_user_id_from_msg(
-                update=update,
+        tg_chat_id = update.effective_chat.id
+        vk_msg_id_for_reply = None
+
+        if update.effective_message.reply_to_message:
+            vk_user_id, vk_message_id = self.get_data_for_reply(
+                tg_chat_id=tg_chat_id, update=update,
             )
 
-            if tg_chat_id == TgConstant.TELEGRAM_CHAT_ID.value:
-                additional_chat = self.table_chat.get_chat(
-                    vk_user_id=vk_user_id,
-                )
-
-                if additional_chat:
-                    chat_link = (
-                        await context.bot.get_chat(
-                            chat_id=additional_chat.tg_chat_id,
-                            )
-                    ).invite_link
-                    text = (
-                        f'Сообщение не было отправлено. Для общения с данным '
-                        f'пользователем используйте чат {chat_link}'
-                    )
-
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=text,
-                    )
-                    return
-        elif (
-                update.effective_message.chat_id
-                == TgConstant.TELEGRAM_CHAT_ID.value
-                or not chat_in_table
-        ):
-            await context.bot.send_message(
-                chat_id=update.effective_message.chat_id,
-                text='Для данного сообщения нет адресата.',
-            )
-            return
+            if tg_chat_id != TgConstant.TELEGRAM_CHAT_ID.value:
+                vk_msg_id_for_reply = vk_message_id
+        else:
+            vk_user_id = self.get_vk_user_id_for_msg(tg_chat_id=tg_chat_id)
 
         photo_data = update.effective_message.photo
-        vk_user_id = (
-            chat_in_table.vk_user_id if not vk_user_id else vk_user_id
-        )
 
         if photo_data:
             photo = await self.get_photo(photo_data=photo_data)
@@ -921,10 +867,23 @@ class TgBot(vkapi.VkApi):
 
         logger.info('Сообщение успешно отправлено в Vk.')
 
-        self.unread_out_messages[tg_chat_id] = update.effective_message.id
         vk_message_id = response.get('response')
         tg_message_id = update.effective_message.id
         chat_id = update.effective_chat.id
+
+        self.table_chat.add_message(
+            vk_user_id=vk_user_id,
+            vk_message_id=vk_message_id,
+            tg_message_id=tg_message_id,
+            tg_chat_id=tg_chat_id,
+        )
+
+        logger.debug(
+            'Исходящее сообщение добавлено в БД.\n'
+            f'user: {vk_user_id}, '
+            f'vk_message_id: {vk_message_id}, '
+            f'tg_message_id: {tg_message_id}.'
+        )
 
         notification = await context.bot.send_message(
             chat_id=chat_id,
@@ -936,19 +895,6 @@ class TgBot(vkapi.VkApi):
         await context.bot.delete_message(
             chat_id=chat_id,
             message_id=notification.message_id,
-        )
-
-        self.table_chat.add_message(
-            vk_user_id=vk_user_id,
-            vk_message_id=vk_message_id,
-            tg_message_id=tg_message_id,
-        )
-
-        logger.debug(
-            'Исходящее сообщение добавлено в БД.\n'
-            f'user: {vk_user_id}, '
-            f'vk_message_id: {vk_message_id}, '
-            f'tg_message_id: {tg_message_id}.'
         )
 
     @log_method
@@ -983,8 +929,8 @@ class TgBot(vkapi.VkApi):
 
         media_group = list()
         images = (
-                message.get('images', [])
-                + message.get('videos', {}).get('video_frames', [])
+            message.get('images', [])
+            + message.get('videos', {}).get('video_frames', [])
         )
 
         if images:
@@ -1013,12 +959,13 @@ class TgBot(vkapi.VkApi):
 
         logger.info('Сообщение успешно отправлено в Telegram.')
 
-        message_id = message['message_id']
+        message_id = message.get('message_id')
 
         self.table_chat.add_message(
             vk_user_id=vk_sender_id,
             vk_message_id=message_id,
             tg_message_id=orig_message_id,
+            tg_chat_id=chat_id,
         )
 
         logger.debug(

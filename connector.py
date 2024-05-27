@@ -28,11 +28,13 @@ class VkTgConnector(vkapi.VkApi):
 
     async def manager(self):
         logger.info(
-            '\nЗапуск vk-tg connector v0.1.8a.'
-            f'\nБаза данных подключена ({DbConstant.DB_ENGINE.value}).'
+            'Запуск vk-tg connector v0.1.8a. '
+            f'База данных подключена ({DbConstant.DB_ENGINE.value}).'
         )
 
         while True:
+            await asyncio.sleep(ConnConst.MANAGER_INTERVAL.value)
+
             try:
                 if not self.timestamp:
                     logger.info('Получаем новый Vk LongPoll-сервер.')
@@ -92,9 +94,13 @@ class VkTgConnector(vkapi.VkApi):
             event_code = element[0]
 
             if event_code == 7:
+                vk_message_id = element[2]
                 vk_user_id = element[1]
 
-                await bot.send_read_notification(vk_user_id=vk_user_id)
+                await bot.send_read_notification(
+                    vk_user_id=vk_user_id,
+                    vk_message_id=vk_message_id
+                )
             elif (
                 event_code == ConnConst.NEW_MSG_CODE.value
                 and element[2] not in ConnConst.OUTGOING_MSG_CODE.value
@@ -139,7 +145,6 @@ class VkTgConnector(vkapi.VkApi):
                 reply_orig_message = self.get_reply_original_message(
                     message_data=message_data,
                 )
-                reply_orig_message['message_id'] = message_id
 
                 await self.send_reply(
                     sender_id=sender_id,
@@ -182,7 +187,6 @@ class VkTgConnector(vkapi.VkApi):
                 sender_signature if not post_comment_exists else None
             ), **post,
         )
-
         ids['post_id'] = await bot.send_msg_vk_tg(
             vk_sender_id=sender_id,
             message=post,
@@ -203,6 +207,7 @@ class VkTgConnector(vkapi.VkApi):
             tg_msg_id_for_reply = reply_orig_message_tg_id
         elif 'wall' in reply_orig_message:
             post = reply_orig_message['wall']
+            post['message_id'] = reply_orig_message['message_id']
             post_comment = reply_orig_message
 
             messages_id = await self.send_wall(
@@ -295,8 +300,15 @@ class VkTgConnector(vkapi.VkApi):
 
 
 def signal_handler(sig, frame):
-    logger.info('Exiting...')
+    logger.info('Завершаем программу...')
     sys.exit(0)
+
+
+async def set_commands_and_run_manager():
+    bot_task = bot.set_commands()
+    connector_task = connector.manager()
+
+    await asyncio.gather(bot_task, connector_task)
 
 
 if __name__ == '__main__':
@@ -304,17 +316,13 @@ if __name__ == '__main__':
 
     table_chat = db.Database()
     bot = tgbot.TgBot(db_table=table_chat)
-    shared_unread_messages = multiprocessing.Manager().dict()
     shared_notifications = multiprocessing.Manager().dict()
-    bot.unread_out_messages = shared_unread_messages
     bot.read_notifications = shared_notifications
 
     bot.add_handlers()
     bot_process = multiprocessing.Process(target=bot.polling)
     bot_process.start()
 
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(bot.set_commands())
-
     connector = VkTgConnector()
-    loop.run_until_complete(connector.manager())
+
+    asyncio.run(set_commands_and_run_manager())

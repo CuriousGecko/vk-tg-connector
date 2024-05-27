@@ -1,4 +1,5 @@
 import json
+from pprint import pprint
 from typing import Any, Union
 
 import requests
@@ -432,6 +433,8 @@ class VkApi(VkApiBase):
 
         reply_message.update(author_info)
 
+        reply_message['message_id'] = message_data['response']['items'][0][
+            'reply_message']['id']
         reply_message['text'] = reply_orig_msg_data.get('text')
         reply_attachments = reply_orig_msg_data.get('attachments')
         reply_message['images'] = self.get_images(

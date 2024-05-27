@@ -28,13 +28,12 @@ class Message(Base):
     )
     tg_message_id = db.Column(db.Integer)
     vk_message_id = db.Column(db.Integer)
+    tg_chat_id = db.Column(db.BigInteger)
 
 
 class Database:
     def __init__(self):
-        engine_args = {
-            'url': DbConstant.DB_URL.value,
-        }
+        engine_args = {'url': DbConstant.DB_URL.value, }
 
         if DbConstant.USE_POSTGRES.value:
             engine_args['echo'] = DbConstant.ECHO.value
@@ -46,11 +45,12 @@ class Database:
 
     def add_or_update_chat(self, vk_user, vk_user_id, tg_chat_id):
         with self.Session() as session:
-            chat = session.query(Chat).filter_by(tg_chat_id=tg_chat_id).first()
+            chat = session.query(Chat).filter_by(vk_user_id=vk_user_id).first()
 
             if chat:
                 chat.vk_user_id = vk_user_id
                 chat.vk_user = vk_user
+                chat.tg_chat_id = tg_chat_id
             else:
                 chat = Chat(
                     vk_user=vk_user,
@@ -85,8 +85,16 @@ class Database:
             vk_user_id,
             tg_message_id,
             vk_message_id,
+            tg_chat_id,
     ):
         with self.Session() as session:
+            chat = session.query(Chat).filter_by(vk_user_id=vk_user_id).first()
+
+            if not chat:
+                chat = Chat(vk_user_id=vk_user_id, tg_chat_id=tg_chat_id)
+                session.add(chat)
+                session.commit()
+
             messages = session.query(Message).filter_by(
                 vk_user_id=vk_user_id
             ).order_by(Message.id).all()
@@ -100,6 +108,7 @@ class Database:
                 vk_user_id=vk_user_id,
                 tg_message_id=tg_message_id,
                 vk_message_id=vk_message_id,
+                tg_chat_id=tg_chat_id,
             )
 
             session.add(message)
@@ -110,6 +119,7 @@ class Database:
             vk_user_id=None,
             tg_message_id=None,
             vk_message_id=None,
+            tg_chat_id=None,
     ):
         filters = list()
 
@@ -119,6 +129,8 @@ class Database:
             filters.append(Message.tg_message_id == tg_message_id)
         if vk_message_id:
             filters.append(Message.vk_message_id == vk_message_id)
+        if tg_chat_id:
+            filters.append(Message.tg_chat_id == tg_chat_id)
 
         with self.Session() as session:
             if len(filters) == 1:
