@@ -18,10 +18,6 @@ class NoDataInResponseError(Exception):
     pass
 
 
-class MissingMessageIdError(Exception):
-    pass
-
-
 class MissingUserVkIdError(Exception):
     pass
 

@@ -16,9 +16,8 @@ from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
 import db
 import vkapi
 from constants import TgConstant
-from exceptions import (MissingMessageIdError, MissingUserVkIdError,
-                        NoDataInResponseError, NoInterlocutorError,
-                        NoMessageForReply)
+from exceptions import (MissingUserVkIdError, NoDataInResponseError,
+                        NoInterlocutorError, NoMessageForReply)
 from logger import run_logger
 
 logger = run_logger('tgbot')
@@ -66,7 +65,7 @@ class TgBot(vkapi.VkApi):
                 return result
 
             except (
-                    MissingMessageIdError,
+                    NoMessageForReply,
                     MissingUserVkIdError,
                     NoInterlocutorError,
             ) as error:
@@ -815,7 +814,7 @@ class TgBot(vkapi.VkApi):
             )
         else:
             raise NoMessageForReply(
-                'не удалось определить id сообщения в Vk, на которое '
+                'не могу определить id сообщения в Vk, на которое '
                 'отправляется ответ.'
             )
 

@@ -1,5 +1,4 @@
 import json
-from pprint import pprint
 from typing import Any, Union
 
 import requests
