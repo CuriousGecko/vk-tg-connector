@@ -246,6 +246,9 @@ class VkApiBase:
 
 class VkApi(VkApiBase):
     """Обработка и дополнение материалов сообщений."""
+    
+    def __init__(self):
+        super().__init__()
 
     def get_user_or_group_info(
             self,

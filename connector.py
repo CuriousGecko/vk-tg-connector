@@ -97,7 +97,7 @@ class VkTgConnector(vkapi.VkApi):
                 vk_message_id = element[2]
                 vk_user_id = element[1]
 
-                await bot.send_read_notification(
+                await notificator.send_read_notification(
                     vk_user_id=vk_user_id,
                     vk_message_id=vk_message_id
                 )
@@ -131,7 +131,7 @@ class VkTgConnector(vkapi.VkApi):
             reply_orig_msg_id = self.get_reply_orig_msg_id(
                 message_data=message_data,
             )
-            msg_in_db = table_chat.get_message(vk_message_id=reply_orig_msg_id)
+            msg_in_db = db.get_message(vk_message_id=reply_orig_msg_id)
 
             if msg_in_db:
                 reply_orig_message_tg_id = msg_in_db.tg_message_id
@@ -165,7 +165,7 @@ class VkTgConnector(vkapi.VkApi):
         else:
             message['text'] = self.text_for_tg(**message)
 
-            await bot.send_msg_vk_tg(
+            await sender_vk_tg.send_msg_vk_tg(
                 vk_sender_id=sender_id,
                 message=message,
             )
@@ -176,7 +176,7 @@ class VkTgConnector(vkapi.VkApi):
 
         if post_comment_exists:
             post_comment['text'] = self.text_for_tg(**post_comment,)
-            ids['post_comment_id'] = await bot.send_msg_vk_tg(
+            ids['post_comment_id'] = await sender_vk_tg.send_msg_vk_tg(
                 vk_sender_id=sender_id,
                 message=post_comment,
             )
@@ -187,7 +187,7 @@ class VkTgConnector(vkapi.VkApi):
                 sender_signature if not post_comment_exists else None
             ), **post,
         )
-        ids['post_id'] = await bot.send_msg_vk_tg(
+        ids['post_id'] = await sender_vk_tg.send_msg_vk_tg(
             vk_sender_id=sender_id,
             message=post,
         )
@@ -225,12 +225,12 @@ class VkTgConnector(vkapi.VkApi):
             reply_orig_message['text'] = self.text_for_tg(
                 **reply_orig_message,
             )
-            tg_msg_id_for_reply = await bot.send_msg_vk_tg(
+            tg_msg_id_for_reply = await sender_vk_tg.send_msg_vk_tg(
                 vk_sender_id=sender_id,
                 message=reply_orig_message,
             )
 
-        await bot.send_msg_vk_tg(
+        await sender_vk_tg.send_msg_vk_tg(
             vk_sender_id=sender_id,
             message=reply,
             reply_to_message_id=tg_msg_id_for_reply,
@@ -314,14 +314,19 @@ async def set_commands_and_run_manager():
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
 
-    table_chat = db.Database()
-    bot = tgbot.TgBot(db_table=table_chat)
-    shared_notifications = multiprocessing.Manager().dict()
-    bot.read_notifications = shared_notifications
+    db = db.Database()
+
+    bot_app_builder = tgbot.TgBotApp(token=TgConstant.TELEGRAM_BOT_TOKEN.value)
+    bot_app = bot_app_builder.app
+    bot = tgbot.TgBot(app=bot_app, database=db)
 
     bot.add_handlers()
-    bot_process = multiprocessing.Process(target=bot.polling)
-    bot_process.start()
+
+    notificator = tgbot.TgBotNotification(app=bot_app, database=db)
+    sender_vk_tg = tgbot.VkTgMessage(app=bot_app, database=db)
+
+    bot_polling = multiprocessing.Process(target=bot.run_polling)
+    bot_polling.start()
 
     connector = VkTgConnector()
 

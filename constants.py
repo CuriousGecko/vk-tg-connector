@@ -47,6 +47,7 @@ class TgConstant(Enum):
     TELEGRAM_CHAT_ID = int(os.getenv('TELEGRAM_CHAT_ID'))
     READ_NOTIFICATION_MODE = int(os.getenv('READ_NOTIFICATION_MODE'))
     SEND_MSG_CONN_TIMEOUT = 120
+    READ_TIMEOUT = 60
     DEL_NOTIFICATION_OF_SEND = 2
 
 
